@@ -1,3 +1,5 @@
+.env
+
 .vscode/
 .egg-info
 media_images/
