@@ -1,4 +1,5 @@
 from typing import Literal
+
 from langchain_core.messages import AIMessage, ToolMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.constants import END, START
@@ -11,21 +12,19 @@ from utils import load_google_generative_ai_model
 
 
 def call_llm(state: State) -> State:
-    print("> call_llm")
     llm = load_google_generative_ai_model().bind_tools(TOOLS)
     result = llm.invoke(state["messages"])
     return {"messages": [result]}
 
 
 def tool_node(state: State) -> State:
-    print("> tool_node")
     llm_response = state["messages"][-1]
 
     if not isinstance(llm_response, AIMessage) or not getattr(
         llm_response, "tool_calls", None
     ):
         return state
-    
+
     tool_call = llm_response.tool_calls[-1]
 
     name, args, id_ = tool_call["name"], tool_call["args"], tool_call["id"]
@@ -44,19 +43,21 @@ def tool_node(state: State) -> State:
         content = f"Erro ao chamar a ferramenta '{name}': {error!s}"
         status = "error"
 
-    tool_message = ToolMessage(content=content, tool_call_id=id_, status=status)
+    tool_message = ToolMessage(
+        content=content,
+        tool_call_id=id_,
+        status=status,
+    )
 
     return {"messages": [tool_message]}
 
 
 def router(state: State) -> Literal["tool_node", "__end__"]:
-    print("> router")
     llm_response = state["messages"][-1]
 
     if getattr(llm_response, "tool_calls", None):
-        return 'tool_node'
+        return "tool_node"
     return "__end__"
-
 
 
 def build_graph() -> CompiledStateGraph[State, None, State, State]:
