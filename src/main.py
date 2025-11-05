@@ -19,14 +19,17 @@ def main() -> None:
     messages = [
         SystemMessage(SYSTEM_PROMPT),
         HumanMessage(
-            "Extraia o texto do PDF no caminho 'pdfs/exemplo.pdf'"
+            "Extraia o texto da prova em PDF no caminho 'pdfs/prova.pdf'"
             "entre as páginas 1 e 3."
-            "E extraia as imagens JPEG dessas páginas e salve-as"
+            " Extraia as imagens JPEG dessas páginas e salve-as"
             " no diretório 'media_images'."
-            "Depois, extraia os dados estruturados conforme as instruções."
+            " Também, extraia o gabarito da prova no caminho 'pdfs/gabarito.pdf'"
+            " Depois, extraia os dados estruturados conforme as instruções."
         ),
     ]
     result = graph.invoke({"messages": messages}, config=config)
+
+    print(result)
 
     content = result["messages"][-1].content
 

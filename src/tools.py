@@ -3,12 +3,12 @@ from pathlib import Path
 from langchain.tools import BaseTool, tool
 from pypdf import PdfReader
 
-pdf_path = Path(__file__).parent.parent / "pdfs" / "exemplo.pdf"
+exam_pdf_path = Path(__file__).parent.parent / "pdfs" / "prova.pdf"
+answer_key_pdf_path = Path(__file__).parent.parent / "pdfs" / "gabarito.pdf"
 
 
-@tool
-def pdf_extract_text(
-    pdf_path: Path = pdf_path,
+def _pdf_extract_text_impl(
+    pdf_path: Path = exam_pdf_path,
     start_page: int = 0,
     end_page: int | None = None,
 ) -> str:
@@ -23,7 +23,6 @@ def pdf_extract_text(
     Returns:
         str: Texto extraído do PDF.
     """
-
     text = ""
     pages_text = {}
 
@@ -47,9 +46,20 @@ def pdf_extract_text(
     return text
 
 
+@tool(description=_pdf_extract_text_impl.__doc__)
+def pdf_extract_text(
+    pdf_path: Path,
+    start_page: int = 0,
+    end_page: int | None = None,
+) -> str:
+    return _pdf_extract_text_impl(
+        pdf_path=pdf_path, start_page=start_page, end_page=end_page
+    )
+
+
 @tool
 def pdf_extract_jpegs(
-    pdf_path: Path = pdf_path,
+    pdf_path: Path,
     output_dir: Path = Path("media_images"),
     start_page: int | None = None,
     end_page: int | None = None,
@@ -88,5 +98,36 @@ def pdf_extract_jpegs(
                         fp.write(image_file_object.data)
 
 
-TOOLS: list[BaseTool] = [pdf_extract_text, pdf_extract_jpegs]
+@tool
+def extract_exam_pdf_text(
+    exam_pdf_path: Path,
+    exam_start_page: int,
+    exam_end_page: int,
+    answer_key_pdf_path: Path,
+) -> str:
+    """
+    Extrai o texto de um PDF de prova, vestibular, exame, etc. E concatena
+    o texto extráido com o texto de um PDF de gabarito, se disponível.
+    Retorna o texto extraído como uma string.
+
+    Returns:
+        str: Texto extraído do PDF da prova e do gabarito.
+    """
+
+    exam_text = _pdf_extract_text_impl(
+        exam_pdf_path, start_page=exam_start_page, end_page=exam_end_page
+    )
+
+    if answer_key_pdf_path.exists():
+        answer_key_text = _pdf_extract_text_impl(pdf_path=answer_key_pdf_path)
+        exam_text += "\n\n--- Gabarito ---\n\n" + answer_key_text
+
+    return exam_text
+
+
+TOOLS: list[BaseTool] = [
+    pdf_extract_text,
+    pdf_extract_jpegs,
+    extract_exam_pdf_text,
+]
 TOOLS_BY_NAME: dict[str, BaseTool] = {tool.name: tool for tool in TOOLS}
