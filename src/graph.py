@@ -11,15 +11,21 @@ from state import State
 from tools import TOOLS, TOOLS_BY_NAME
 from utils import load_google_generative_ai_model
 
+# def call_llm(state: State) -> State:
+#     llm = load_google_generative_ai_model().bind_tools(TOOLS)
+#     result = llm.invoke(state["messages"])
 
-def call_llm(state: State) -> State:
+#     return {"messages": [result]}
+
+
+async def call_llm(state: State) -> State:
     llm = load_google_generative_ai_model().bind_tools(TOOLS)
-    result = llm.invoke(state["messages"])
+    result = await llm.ainvoke(state["messages"])
 
     return {"messages": [result]}
 
 
-def tool_node(state: State) -> State:
+async def tool_node(state: State) -> State:
     llm_response = state["messages"][-1]
 
     if not isinstance(llm_response, AIMessage) or not getattr(
@@ -36,7 +42,7 @@ def tool_node(state: State) -> State:
 
         print(f"Invoking tool '{name}' with args: {args}")
         try:
-            content = TOOLS_BY_NAME[name].invoke(args)
+            content = await TOOLS_BY_NAME[name].ainvoke(args)
             status = "success"
 
         except (

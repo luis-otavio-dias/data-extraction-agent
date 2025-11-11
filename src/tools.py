@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 from langchain.tools import BaseTool, tool
@@ -48,18 +49,6 @@ def _pdf_extract_text_impl(
             text += f"\n\n --- Page {page_no} --- \n\n{page_text}"
 
     return text
-
-
-# @tool(description=_pdf_extract_text_impl.__doc__)
-# def pdf_extract_text(
-#     pdf_path: Path,
-#     start_page: int | None = None,
-#     end_page: int | None = None,
-# ) -> str:
-
-#     return _pdf_extract_text_impl(
-#         pdf_path=pdf_path, start_page=start_page, end_page=end_page
-#     )
 
 
 @tool
@@ -145,7 +134,7 @@ def extract_exam_pdf_text(
 
 
 @tool
-def structure_questions(extracted_text_path: str) -> str:
+async def structure_questions(extracted_text_path: str) -> str:
     """
     Recebe a string de texto longa e completa gerada pela ferramenta
     extract_exam_pdf_text e a analisa, extraindo as questões em formato JSON.
@@ -156,8 +145,9 @@ def structure_questions(extracted_text_path: str) -> str:
     Returns:
         str: Array JSON com as questões estruturadas.
     """
-    with Path(extracted_text_path).open(encoding="utf-8") as f:
-        extracted_text = f.read()
+    extracted_text = await asyncio.to_thread(
+        Path(extracted_text_path).read_text, encoding="utf-8"
+    )
 
     llm = load_google_generative_ai_model()
     parser = JsonOutputParser()
@@ -234,7 +224,7 @@ Output Instructions:
         ),
     ]
 
-    ai = llm.invoke(messages)
+    ai = await llm.ainvoke(messages)
 
     content = ai.content
 

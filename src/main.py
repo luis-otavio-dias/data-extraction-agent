@@ -1,8 +1,11 @@
+import asyncio
 import json
 import time
 from pathlib import Path
 from typing import Any
 
+from langchain_core.caches import InMemoryCache
+from langchain_core.globals import set_llm_cache
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.output_parsers import JsonOutputParser
 from langgraph.graph.state import RunnableConfig
@@ -21,7 +24,7 @@ def _content_to_text(content: str | list[str | dict[str, Any]]) -> str:
         parts: list[str] = []
 
         for item in content:
-            if isinstance(item, str):
+            if isinstance(item, str) and item.strip():
                 parts.append(item)
 
             elif isinstance(item, dict):
@@ -38,7 +41,8 @@ def _content_to_text(content: str | list[str | dict[str, Any]]) -> str:
     return str(content)
 
 
-def main() -> None:
+async def main() -> None:
+    set_llm_cache(InMemoryCache())
     config = RunnableConfig(configurable={"thread_id": 1})
     graph = build_graph()
 
@@ -46,13 +50,17 @@ def main() -> None:
         SystemMessage(SYSTEM_PROMPT),
         HumanMessage(HUMAN_PROMPT),
     ]
-    result = graph.invoke({"messages": messages}, config=config)
+
+    result = await graph.ainvoke({"messages": messages}, config=config)
+    # -> dict[str, Any] | Any
+
+    # result = graph.astream({"messages": messages}, config=config)
+    # -> AsyncIterator[dict[str, Any] | Any]
 
     final_message = result["messages"][-1]
     if isinstance(final_message, AIMessage):
         content = final_message.content
         raw_text: str = _content_to_text(content)
-        print(content)
         try:
 
             parsed = JsonOutputParser().invoke(raw_text)
@@ -73,7 +81,8 @@ def main() -> None:
 
 if __name__ == "__main__":
     start = time.perf_counter()
-    main()
+    asyncio.run(main())
     end = time.perf_counter()
     print(f"Execution time: {end - start:.2f} seconds")
-    # expected time:  ~1165 seconds
+    # first time execution (before async functions and cache):  ~1165 seconds
+    # subsequent executions (with cache): ~1054 seconds
