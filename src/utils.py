@@ -2,7 +2,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 
 
 def load_google_generative_ai_model(
-    model_name: str = "gemini-2.5-flash", temperature: float = 0
+    model_name: str = "gemini-2.5-pro", temperature: float = 0
 ) -> ChatGoogleGenerativeAI:
     """Inicializa e retorna um modelo de linguagem ChatGoogleGenerativeAI.
 

@@ -5,6 +5,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.constants import END, START
 from langgraph.graph.state import CompiledStateGraph, StateGraph
 from pydantic import ValidationError
+from rich import print
 
 from state import State
 from tools import TOOLS, TOOLS_BY_NAME
@@ -14,7 +15,8 @@ from utils import load_google_generative_ai_model
 def call_llm(state: State) -> State:
     llm = load_google_generative_ai_model().bind_tools(TOOLS)
     result = llm.invoke(state["messages"])
-    return {"messages": [*state["messages"], result]}
+
+    return {"messages": [result]}
 
 
 def tool_node(state: State) -> State:
@@ -32,6 +34,7 @@ def tool_node(state: State) -> State:
         args = tool_call.get("args", {}) or {}
         id_ = tool_call.get("id", None)
 
+        print(f"Invoking tool '{name}' with args: {args}")
         try:
             content = TOOLS_BY_NAME[name].invoke(args)
             status = "success"
@@ -54,11 +57,17 @@ def tool_node(state: State) -> State:
             )
         )
 
-    return {"messages": [*state["messages"], *tool_messages]}
+    return {"messages": tool_messages}
 
 
 def router(state: State) -> Literal["tool_node", "__end__"]:
     llm_response = state["messages"][-1]
+
+    if (
+        isinstance(llm_response, ToolMessage)
+        and getattr(llm_response, "name", None) == "structure_questions"
+    ):
+        return "__end__"
 
     if isinstance(llm_response, AIMessage) and getattr(
         llm_response, "tool_calls", None

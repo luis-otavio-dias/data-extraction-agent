@@ -1,15 +1,41 @@
 import json
 import time
 from pathlib import Path
+from typing import Any
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.output_parsers import JsonOutputParser
 from langgraph.graph.state import RunnableConfig
 from pydantic import ValidationError
 from rich import print
 
 from graph import build_graph
-from prompts import SYSTEM_PROMPT
+from prompts import HUMAN_PROMPT, SYSTEM_PROMPT
+
+
+def _content_to_text(content: str | list[str | dict[str, Any]]) -> str:
+    if isinstance(content, str):
+        return content
+
+    if isinstance(content, list):
+        parts: list[str] = []
+
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+
+            elif isinstance(item, dict):
+                txt = item.get("text", "")
+                if txt and txt.strip():
+                    parts.append(txt)
+
+                elif (
+                    isinstance(item.get("content", None), str)
+                    and item["content"].strip()
+                ):
+                    parts.append(item["content"])
+        return "\n".join(parts)
+    return str(content)
 
 
 def main() -> None:
@@ -18,32 +44,31 @@ def main() -> None:
 
     messages = [
         SystemMessage(SYSTEM_PROMPT),
-        HumanMessage(
-            "Extraia o texto da prova em PDF no caminho 'pdfs/prova.pdf'"
-            "entre as páginas 1 e 3."
-            " Extraia as imagens JPEG dessas páginas e salve-as"
-            " no diretório 'media_images'."
-            " Também, extraia o gabarito da prova no caminho 'pdfs/gabarito.pdf'"
-            " Depois, extraia os dados estruturados conforme as instruções."
-        ),
+        HumanMessage(HUMAN_PROMPT),
     ]
     result = graph.invoke({"messages": messages}, config=config)
 
-    print(result)
+    final_message = result["messages"][-1]
+    if isinstance(final_message, AIMessage):
+        content = final_message.content
+        raw_text: str = _content_to_text(content)
+        print(content)
+        try:
 
-    content = result["messages"][-1].content
+            parsed = JsonOutputParser().invoke(raw_text)
 
-    try:
-        parsed = JsonOutputParser().invoke(content[-1]["text"])
+            json_path = Path(__file__).parent / "final_output.json"
 
-        json_path = Path(__file__).parent / "final_output.json"
+            with json_path.open("w", encoding="utf-8") as file:
+                json.dump(parsed, file, indent=4, ensure_ascii=False)
 
-        with json_path.open("w", encoding="utf-8") as file:
-            json.dump(parsed, file, indent=4, ensure_ascii=False)
+        except ValidationError as e:
+            print(f"Errro ao parsear a resposta JSON: {e}")
+            print(f"Conteúdo bruto da resposta: {content}")
 
-    except ValidationError as e:
-        print(f"Errro ao parsear a resposta JSON: {e}")
-        print(f"Conteúdo bruto da resposta: {content}")
+    else:
+        print("content não foi parsable.")
+        return
 
 
 if __name__ == "__main__":
@@ -51,3 +76,4 @@ if __name__ == "__main__":
     main()
     end = time.perf_counter()
     print(f"Execution time: {end - start:.2f} seconds")
+    # expected time:  ~1165 seconds

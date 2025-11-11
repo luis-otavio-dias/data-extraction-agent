@@ -1,4 +1,7 @@
 .env
+*.json
+
+/temp/
 
 .vscode/
 .egg-info
