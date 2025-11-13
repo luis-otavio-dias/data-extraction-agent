@@ -13,7 +13,9 @@ from utils import load_google_generative_ai_model
 
 
 async def call_llm(state: State) -> State:
-    llm = load_google_generative_ai_model().bind_tools(TOOLS)
+    llm = load_google_generative_ai_model(
+        model_name="gemini-2.5-flash", temperature=0
+    ).bind_tools(TOOLS)
     result = await llm.ainvoke(state["messages"])
 
     return {"messages": [result]}

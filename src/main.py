@@ -76,9 +76,11 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
+    print(f"Start execution at {time.strftime('%X')}")
     start = time.perf_counter()
     asyncio.run(main())
     end = time.perf_counter()
     print(f"Execution time: {end - start:.2f} seconds")
     # first time execution (before async functions and cache):  ~1165 seconds
     # subsequent executions (with cache): ~1054 seconds
+    # after optimizations in tool 'structure_questions': ~ 525 seconds

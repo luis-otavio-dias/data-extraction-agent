@@ -1,9 +1,9 @@
 import asyncio
+import json
 from pathlib import Path
 
 from langchain.tools import BaseTool, tool
-from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.output_parsers import JsonOutputParser
+from langchain_text_splitters.character import RecursiveCharacterTextSplitter
 from pypdf import PdfReader
 
 from utils import load_google_generative_ai_model
@@ -160,86 +160,52 @@ async def structure_questions(extracted_text_path: str) -> str:
         Path(extracted_text_path).read_text, encoding="utf-8"
     )
 
-    llm = load_google_generative_ai_model()
-    parser = JsonOutputParser()
-    format_instructions = parser.get_format_instructions()
-
-    system = (
-        "You are an expert in extracting and structuring exam questions into a"
-        " JSON format. Given the text of an exam and its answer key, "
-        " your task is identify each question along with its possible answers"
-        " and the correct answer from the answer key. "
-        "Structure the output as a JSON array where each element represents a"
-        " question with its details."
-        "Produce ONLY a JSON array, one object per question. No code fences.\n"
-        f"{format_instructions}"
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=20000,
+        chunk_overlap=500,
     )
 
-    schema_hint = """
-Follow this structure exactly for each question:
-    - Question and question number
-    - Whether there is an image associated with the question (true/false)
-    - The passage text:
-        - Some questions may have a passage before the statement that should
-        be included.
-        - Add break lines (\n) as needed to preserve paragraph structure.
-        - If there is no passage, return an empty string for this field.
-        - May contain the source of the passage text.
-        - The source of the passage text must be stored in the Sources field,
-        following the instructions provided.
-        - The source of the passage should not be included in the passage text
-        itself.
-    - Sources:
-        - A list of strings indicating the source of the passage text or the
-        source of an image.
-        - Even if the source is for an image, the tool 'pdf_extract_jpegs'
-         must be called to extract and save the image files.
-        - If there is no source, return an empty list for this field.
-        - May be an URL or a book reference, article, textbook, etc.
-        - If is an URL:
-            - Extract the link and store it as it is.
-            - Extract the access date. Identify by phrases like this stucture
-            "text: date".
-            - Store only the content as it is. Without the preceding
-             phrase "text: "
-        - If is a book reference, article, textbook, etc.:
-            - Extract and store is as it is.
-    - Statement
-    - Options (A, B, C, D, E)
-    - Correct option (A, B, C, D, E)
+    text_chunks = text_splitter.split_text(extracted_text)
 
-Output Instructions:
-- Return only a JSON array with one object per question (no code fences).
-- Follow this structure exactly:
-{
-    "question": str,
-    "image": bool,
-    "passage_text": str,
-    "sources": [str],
-    "statement": str,
-    "options": {
-        "A": str,
-        "B": str,
-        "C": str,
-        "D": str,
-        "E": str
-    },
-    "correct_option": str
-}
-""".strip()
+    all_results = []
 
-    messages = [
-        SystemMessage(system),
-        HumanMessage(
-            f"{schema_hint}\n\nEXAM_TEXT_START\n{extracted_text}\n\nEXAM_TEXT_END"
-        ),
-    ]
+    llm = load_google_generative_ai_model(
+        model_name="gemini-2.5-flash", temperature=0
+    )
 
-    ai = await llm.ainvoke(messages)
+    for chunk in text_chunks:
 
-    content = ai.content
+        prompt = f"""
+    You are an expert data extractor. Your task is to extract exam questions from the text below and match them with the provided Answer Key.
+    
+    Rules:
+    1. Output MUST be a valid JSON Array. One object per question.
+    2. Use the provided Answer Key to fill the 'correct_option' field.
+    3. If a question is split or incomplete at the start/end of the text and cannot be fully understood, IGNORE IT.
+    4. Image extraction: If the question implies an image, set "image": true.
+    
+    Target JSON Structure:
+    {{
+        "question": "Question number (e.g., '01', '10')",
+        "image": boolean,
+        "passage_text": "Text of the associated passage/text/poem. Include source if present in passage but put citation in 'sources'. Empty string if none.",
+        "sources": ["List of source strings (URLs, Books, access dates)"],
+        "statement": "The question statement itself",
+        "options": {{ "A": "...", "B": "...", "C": "...", "D": "...", "E": "..." }},
+        "correct_option": "Letter only (A, B, C, D, or E)"
+    }}
 
-    return str(content).strip()
+
+    Exam Text Fragment:
+    {chunk}
+    """
+
+        chunked_response = await llm.ainvoke(prompt)
+        all_results.extend(chunked_response.content)
+
+        await asyncio.sleep(1)
+
+    return json.dumps(all_results, indent=2, ensure_ascii=False)
 
 
 TOOLS: list[BaseTool] = [
